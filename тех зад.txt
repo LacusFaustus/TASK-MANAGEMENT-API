@@ -1,0 +1,488 @@
+ТЕХНИЧЕСКОЕ ЗАДАНИЕ: TASK MANAGEMENT API
+1. Общее описание
+Цель: Разработка безопасного REST API для управления задачами с системой аутентификации и авторизации, поддержкой командной работы и расширенными возможностями поиска и фильтрации.
+
+Бизнес-контекст: Система позволяет пользователям создавать, организовывать и отслеживать задачи в персональном и командном пространствах.
+
+2. Функциональные требования
+2.1. Управление пользователями
+Регистрация с валидацией email
+
+Аутентификация по email/password с JWT
+
+Профиль пользователя: имя, avatar, настройки уведомлений
+
+Восстановление пароля через email
+
+2.2. Управление задачами
+java
+// Статусы задачи
+enum TaskStatus {
+    TODO, IN_PROGRESS, CODE_REVIEW, TESTING, DONE, CANCELLED
+}
+
+// Приоритеты
+enum Priority {
+    LOW, MEDIUM, HIGH, URGENT
+}
+Операции:
+
+Создание/редактирование/удаление задач
+
+Изменение статуса задачи
+
+Назначение исполнителей
+
+Добавление тегов и категорий
+
+Установка дедлайнов
+
+Добавление комментариев и файлов
+
+2.3. Рабочие пространства (Workspaces)
+Создание рабочих пространств
+
+Приглашение участников по email
+
+Ролевая модель в workspace:
+
+OWNER - полный доступ
+
+ADMIN - управление задачами и участниками
+
+MEMBER - создание/редактирование задач
+
+VIEWER - только просмотр
+
+2.4. Поиск и фильтрация
+Полнотекстовый поиск по названию и описанию
+
+Фильтрация по:
+
+Статусу и приоритету
+
+Исполнителю
+
+Тегам и категориям
+
+Диапазону дат создания/дедлайна
+
+Пагинация и сортировка
+
+3. Технические требования
+3.1. Технологический стек
+yaml
+Backend:
+  - Java 17+
+  - Spring Boot 3.x
+  - Spring Security 6.x + JWT
+  - Spring Data JPA
+  - Hibernate 6.x
+  - PostgreSQL 14+
+  - Maven
+
+Дополнительно:
+  - Liquibase/Flyway для миграций
+  - MapStruct для маппинга DTO
+  - JJWT для работы с JWT
+  - Spring Doc OpenAPI 3.0
+3.2. Модель данных
+sql
+-- Пользователи
+CREATE TABLE users (
+    id BIGSERIAL PRIMARY KEY,
+    email VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100),
+    last_name VARCHAR(100),
+    avatar_url TEXT,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Рабочие пространства
+CREATE TABLE workspaces (
+    id BIGSERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    owner_id BIGINT REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Задачи
+CREATE TABLE tasks (
+    id BIGSERIAL PRIMARY KEY,
+    title VARCHAR(500) NOT NULL,
+    description TEXT,
+    status VARCHAR(50) DEFAULT 'TODO',
+    priority VARCHAR(50) DEFAULT 'MEDIUM',
+    due_date TIMESTAMP,
+    workspace_id BIGINT REFERENCES workspaces(id),
+    author_id BIGINT REFERENCES users(id),
+    assignee_id BIGINT REFERENCES users(id),
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Индексы для оптимизации
+CREATE INDEX idx_tasks_status ON tasks(status);
+CREATE INDEX idx_tasks_workspace_id ON tasks(workspace_id);
+CREATE INDEX idx_tasks_due_date ON tasks(due_date);
+CREATE INDEX idx_tasks_assignee_id ON tasks(assignee_id);
+3.3. API Endpoints
+Аутентификация:
+
+http
+POST /api/v1/auth/register     # Регистрация
+POST /api/v1/auth/login        # Вход
+POST /api/v1/auth/refresh      # Обновление токена
+POST /api/v1/auth/password-reset # Сброс пароля
+Рабочие пространства:
+
+http
+GET    /api/v1/workspaces                 # Список workspace
+POST   /api/v1/workspaces                 # Создание workspace
+GET    /api/v1/workspaces/{id}            # Детали workspace
+PUT    /api/v1/workspaces/{id}            # Обновление workspace
+DELETE /api/v1/workspaces/{id}            # Удаление workspace
+POST   /api/v1/workspaces/{id}/invite     # Приглашение участника
+Задачи:
+
+http
+GET    /api/v1/tasks                      # Список задач с фильтрацией
+POST   /api/v1/tasks                      # Создание задачи
+GET    /api/v1/tasks/{id}                 # Детали задачи
+PUT    /api/v1/tasks/{id}                 # Обновление задачи
+DELETE /api/v1/tasks/{id}                 # Удаление задачи
+POST   /api/v1/tasks/{id}/comments        # Добавление комментария
+PUT    /api/v1/tasks/{id}/status          # Изменение статуса
+POST   /api/v1/tasks/{id}/assign          # Назначение исполнителя
+4. Требования к безопасности
+4.1. Аутентификация
+JWT токены (access + refresh)
+
+Access token срок жизни: 15 минут
+
+Refresh token срок жизни: 7 дней
+
+Хеширование паролей с bcrypt
+
+4.2. Авторизация
+java
+// Пример проверок доступа
+@PreAuthorize("hasRole('WORKSPACE_ADMIN') or @taskSecurity.isTaskAuthor(#taskId)")
+@PreAuthorize("@workspaceSecurity.isWorkspaceMember(#workspaceId)")
+@PreAuthorize("hasPermission(#taskId, 'TASK', 'WRITE')")
+4.3. Защита данных
+Валидация всех входных данных
+
+Защита от SQL-инъекций
+
+Ограничение частоты запросов (Rate Limiting)
+
+Санитизация HTML в комментариях
+
+5. Оптимизация производительности
+5.1. Проблемные места для оптимизации:
+sql
+-- Медленный запрос (ДО оптимизации):
+SELECT * FROM tasks 
+WHERE workspace_id = ? 
+AND status IN ('TODO', 'IN_PROGRESS') 
+AND assignee_id = ?
+ORDER BY created_at DESC;
+
+-- Оптимизированный запрос (ПОСЛЕ):
+SELECT t.id, t.title, t.status, t.priority, 
+       u.first_name as assignee_name,
+       COUNT(*) OVER() as total_count
+FROM tasks t
+LEFT JOIN users u ON t.assignee_id = u.id
+WHERE t.workspace_id = ? 
+AND t.status IN ('TODO', 'IN_PROGRESS') 
+AND t.assignee_id = ?
+ORDER BY t.created_at DESC
+LIMIT 20 OFFSET 0;
+5.2. Стратегии оптимизации:
+Индексы: Составные индексы для частых запросов
+
+Пагинация: Page-based и cursor-based пагинация
+
+Кэширование: Redis для часто запрашиваемых данных
+
+N+1 проблемы: Решение через JOIN FETCH в Hibernate
+
+Проекции: Использование DTO вместо Entity
+
+6. Тестирование
+6.1. Unit тесты:
+Тесты сервисов с Mockito
+
+Тесты валидации и маппинга
+
+Coverage > 80%
+
+6.2. Интеграционные тесты:
+java
+@Testcontainers
+class TaskServiceIntegrationTest {
+    
+    @Test
+    void createTask_WithValidData_ShouldCreateTask() {
+        // Given
+        User user = createTestUser();
+        Workspace workspace = createWorkspace(user);
+        
+        // When
+        TaskDto task = taskService.createTask(createTaskRequest, user.getId());
+        
+        // Then
+        assertThat(task).isNotNull();
+        assertThat(task.getTitle()).isEqualTo("Test Task");
+    }
+}
+6.3. API тесты:
+Тестирование всех endpoints с TestRestTemplate
+
+Тестирование безопасности и валидации
+
+Нагрузочное тестирование критичных endpoints
+
+7. Документация и деплой
+7.1. Документация API:
+Swagger/OpenAPI 3.0 документация
+
+Примеры запросов/ответов для всех endpoints
+
+Описание ошибок и статус кодов
+
+7.2. Запуск проекта:
+yaml
+# docker-compose.yml
+version: '3.8'
+services:
+  app:
+    build: .
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://postgres:5432/taskdb
+      - JWT_SECRET=your-secret-key
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:14
+    environment:
+      - POSTGRES_DB=taskdb
+      - POSTGRES_USER=taskuser
+      - POSTGRES_PASSWORD=taskpass
+8. Критерии приемки
+8.1. Функциональные:
+Регистрация и аутентификация работают
+
+CRUD операции для задач и workspace
+
+Ролевая модель авторизации функционирует
+
+Поиск и фильтрация возвращают корректные данные
+
+Время ответа API < 200ms для 95% запросов
+
+8.2. Технические:
+Все SQL запросы оптимизированы (EXPLAIN ANALYZE)
+
+Интеграционные тесты проходят
+
+Документация API доступна по /swagger-ui.html
+
+Приложение запускается через Docker Compose
+
+Логирование настроено корректно
+
+8.3. Безопасность:
+JWT токены валидируются корректно
+
+Пароли хранятся в хешированном виде
+
+Проверки авторизации на всех защищенных endpoints
+
+Валидация входных данных
+
+Что демонстрирует это ТЗ:
+Глубокое понимание Spring Security - сложная ролевая модель
+
+Навыки оптимизации БД - конкретные примеры индексов и запросов
+
+Знание лучших практик - пагинация, валидация, безопасность
+
+Опыт работы с PostgreSQL - сложные запросы, индексы
+
+Понимание полного цикла разработки - от проектирования до тестирования
+
+Это ТЗ показывает, что вы не просто "сделал CRUD", а продумал архитектуру, безопасность и производительность как настоящий разработчик.
+
+
+task-management-api/
+├── 📁 src/
+│   ├── 📁 main/
+│   │   ├── 📁 java/
+│   │   │   └── 📁 com/
+│   │   │       └── 📁 taskmanagement/
+│   │   │           ├── 🟦 TaskManagementApplication.java
+│   │   │           ├── 📁 config/
+│   │   │           │   ├── 🟦 SecurityConfig.java
+│   │   │           │   ├── 🟦 JwtAuthenticationFilter.java
+│   │   │           │   ├── 🟦 OpenApiConfig.java
+│   │   │           │   ├── 🟦 MapperConfig.java
+│   │   │           │   ├── 🟦 RedisConfig.java
+│   │   │           │   └── 🟦 AsyncConfig.java
+│   │   │           ├── 📁 controller/
+│   │   │           │   ├── 📁 auth/
+│   │   │           │   │   ├── 🟦 AuthenticationController.java
+│   │   │           │   │   └── 🟦 PasswordResetController.java
+│   │   │           │   ├── 📁 task/
+│   │   │           │   │   ├── 🟦 TaskController.java
+│   │   │           │   │   └── 🟦 TaskCommentController.java
+│   │   │           │   ├── 📁 workspace/
+│   │   │           │   │   ├── 🟦 WorkspaceController.java
+│   │   │           │   │   └── 🟦 WorkspaceMemberController.java
+│   │   │           │   └── 📁 user/
+│   │   │           │       └── 🟦 UserController.java
+│   │   │           ├── 📁 dto/
+│   │   │           │   ├── 📁 request/
+│   │   │           │   │   ├── 🟦 LoginRequest.java
+│   │   │           │   │   ├── 🟦 RegisterRequest.java
+│   │   │           │   │   ├── 🟦 TaskCreateRequest.java
+│   │   │           │   │   ├── 🟦 TaskUpdateRequest.java
+│   │   │           │   │   ├── 🟦 WorkspaceCreateRequest.java
+│   │   │           │   │   ├── 🟦 TaskFilterRequest.java
+│   │   │           │   │   └── 🟦 PasswordResetRequest.java
+│   │   │           │   ├── 📁 response/
+│   │   │           │   │   ├── 🟦 AuthResponse.java
+│   │   │           │   │   ├── 🟦 TaskResponse.java
+│   │   │           │   │   ├── 🟦 WorkspaceResponse.java
+│   │   │           │   │   ├── 🟦 UserProfileResponse.java
+│   │   │           │   │   └── 🟦 ApiResponse.java
+│   │   │           │   └── 📁 pagination/
+│   │   │           │       ├── 🟦 PageResponse.java
+│   │   │           │       └── 🟦 SearchCriteria.java
+│   │   │           ├── 📁 entity/
+│   │   │           │   ├── 🟦 User.java
+│   │   │           │   ├── 🟦 Workspace.java
+│   │   │           │   ├── 🟦 Task.java
+│   │   │           │   ├── 🟦 TaskComment.java
+│   │   │           │   ├── 🟦 WorkspaceMember.java
+│   │   │           │   ├── 🟦 TaskAttachment.java
+│   │   │           │   ├── 🟦 Tag.java
+│   │   │           │   ├── 🟦 Category.java
+│   │   │           │   └── 📁 enums/
+│   │   │           │       ├── 🟦 TaskStatus.java
+│   │   │           │       ├── 🟦 Priority.java
+│   │   │           │       ├── 🟦 WorkspaceRole.java
+│   │   │           │       └── 🟦 NotificationType.java
+│   │   │           ├── 📁 repository/
+│   │   │           │   ├── 🟦 UserRepository.java
+│   │   │           │   ├── 🟦 WorkspaceRepository.java
+│   │   │           │   ├── 🟦 TaskRepository.java
+│   │   │           │   ├── 🟦 TaskCommentRepository.java
+│   │   │           │   ├── 🟦 WorkspaceMemberRepository.java
+│   │   │           │   ├── 🟦 TaskAttachmentRepository.java
+│   │   │           │   └── 📁 specification/
+│   │   │           │       └── 🟦 TaskSpecification.java
+│   │   │           ├── 📁 service/
+│   │   │           │   ├── 🟦 UserService.java
+│   │   │           │   ├── 🟦 TaskService.java
+│   │   │           │   ├── 🟦 WorkspaceService.java
+│   │   │           │   ├── 🟦 AuthService.java
+│   │   │           │   ├── 🟦 EmailService.java
+│   │   │           │   ├── 🟦 JwtService.java
+│   │   │           │   ├── 🟦 TaskSearchService.java
+│   │   │           │   └── 📁 impl/
+│   │   │           │       ├── 🟦 UserServiceImpl.java
+│   │   │           │       ├── 🟦 TaskServiceImpl.java
+│   │   │           │       ├── 🟦 WorkspaceServiceImpl.java
+│   │   │           │       ├── 🟦 AuthServiceImpl.java
+│   │   │           │       └── 🟦 EmailServiceImpl.java
+│   │   │           ├── 📁 security/
+│   │   │           │   ├── 🟦 CustomUserDetails.java
+│   │   │           │   ├── 🟦 CustomUserDetailsService.java
+│   │   │           │   ├── 🟦 JwtAuthenticationEntryPoint.java
+│   │   │           │   ├── 🟦 WorkspaceSecurity.java
+│   │   │           │   └── 🟦 TaskSecurity.java
+│   │   │           ├── 📁 mapper/
+│   │   │           │   ├── 🟦 UserMapper.java
+│   │   │           │   ├── 🟦 TaskMapper.java
+│   │   │           │   ├── 🟦 WorkspaceMapper.java
+│   │   │           │   └── 🟦 CommentMapper.java
+│   │   │           ├── 📁 util/
+│   │   │           │   ├── 🟦 PasswordGenerator.java
+│   │   │           │   ├── 🟦 HtmlSanitizer.java
+│   │   │           │   ├── 🟦 ValidationUtils.java
+│   │   │           │   └── 🟦 DateTimeUtils.java
+│   │   │           ├── 📁 exception/
+│   │   │           │   ├── 🟦 GlobalExceptionHandler.java
+│   │   │           │   ├── 🟦 ResourceNotFoundException.java
+│   │   │           │   ├── 🟦 BusinessException.java
+│   │   │           │   ├── 🟦 UnauthorizedException.java
+│   │   │           │   └── 🟦 ErrorCode.java
+│   │   │           └── 📁 validation/
+│   │   │               ├── 🟦 UniqueEmailValidator.java
+│   │   │               ├── 🟦 ValidPasswordValidator.java
+│   │   │               └── 🟦 ValidDueDateValidator.java
+│   │   └── 📁 resources/
+│   │       ├── 📄 application.yml
+│   │       ├── 📄 application-dev.yml
+│   │       ├── 📄 application-prod.yml
+│   │       ├── 📁 db/
+│   │       │   └── 📁 migration/
+│   │       │       ├── 📄 V1__Initial_schema.sql
+│   │       │       ├── 📄 V2__Add_workspace_members.sql
+│   │       │       ├── 📄 V3__Add_task_comments_attachments.sql
+│   │       │       └── 📄 V4__Add_indexes.sql
+│   │       ├── 📁 templates/
+│   │       │   ├── 📄 password-reset-email.html
+│   │       │   └── 📄 workspace-invitation.html
+│   │       └── 📁 static/
+│   │           └── 📁 avatars/
+│   └── 📁 test/
+│       ├── 📁 java/
+│       │   └── 📁 com/
+│       │       └── 📁 taskmanagement/
+│       │           ├── 🟦 TaskManagementApplicationTests.java
+│       │           ├── 📁 unit/
+│       │           │   ├── 📁 service/
+│       │           │   │   ├── 🟦 TaskServiceTest.java
+│       │           │   │   ├── 🟦 UserServiceTest.java
+│       │           │   │   └── 🟦 WorkspaceServiceTest.java
+│       │           │   ├── 📁 security/
+│       │           │   │   └── 🟦 JwtServiceTest.java
+│       │           │   └── 📁 mapper/
+│       │           │       └── 🟦 TaskMapperTest.java
+│       │           ├── 📁 integration/
+│       │           │   ├── 🟦 TaskControllerIT.java
+│       │           │   ├── 🟦 AuthControllerIT.java
+│       │           │   └── 🟦 WorkspaceControllerIT.java
+│       │           └── 📁 util/
+│       │               └── 🟦 TestDataFactory.java
+│       └── 📁 resources/
+│           └── 📄 application-test.yml
+├── 📁 docker/
+│   ├── 📄 Dockerfile
+│   ├── 📄 docker-compose.yml
+│   └── 📄 docker-compose.dev.yml
+├── 📁 docs/
+│   ├── 📄 API.md
+│   ├── 📄 DEPLOYMENT.md
+│   └── 📄 DATABASE.md
+├── 📁 scripts/
+│   ├── 📄 deploy.sh
+│   ├── 📄 test.sh
+│   └── 📄 db-migration.sh
+├── 📄 pom.xml
+├── 📄 README.md
+├── 📄 .gitignore
+├── 📄 .dockerignore
+└── 📄 mvnw
+
+

@@ -1,0 +1,47 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:taskdb_prod}
+    username: ${DB_USERNAME:taskuser}
+    password: ${DB_PASSWORD:taskpass}
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        jdbc.batch_size: 20
+        order_inserts: true
+        order_updates: true
+
+  liquibase:
+    contexts: prod
+
+logging:
+  level:
+    com.taskmanagement: INFO
+    org.springframework.security: WARN
+
+server:
+  port: 8080
+  compression:
+    enabled: true
+    mime-types: text/html,text/xml,text/plain,text/css,text/javascript,application/javascript,application/json
+    min-response-size: 1024
+
+file:
+  upload-dir: /app/uploads
+
+jwt:
+  secret: ${JWT_SECRET:prod-super-secret-key-with-minimum-256-bits-length}
+  access-token:
+    expiration: 900000 # 15 minutes
+  refresh-token:
+    expiration: 604800000 # 7 days
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,info
+  endpoint:
+    health:
+      show-details: when_authorized

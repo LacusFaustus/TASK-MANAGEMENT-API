@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    username: sa
+    password:
+    driver-class-name: org.h2.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+
+  liquibase:
+    enabled: false
+
+  cache:
+    type: none
+
+logging:
+  level:
+    com.taskmanagement: WARN
+    org.springframework.security: WARN
+    org.hibernate.SQL: WARN
+
+file:
+  upload-dir: ./uploads/test
+
+jwt:
+  secret: mySuperSecretKeyThatIsAtLeast32BytesLongForHS256Algorithm1234567890123456
+  access-token:
+    expiration: 86400000
+  refresh-token:
+    expiration: 604800000
+
+# Отключаем ненужные для тестов компоненты
+management:
+  endpoints:
+    web:
+      exposure:
+        include: ""
