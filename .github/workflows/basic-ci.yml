@@ -1,0 +1,31 @@
+name: Basic CI
+
+on:
+  push:
+    branches: [ main, new, new1, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: 'maven'
+
+      - name: Build project
+        run: mvn clean compile -DskipTests
+
+      - name: Run tests
+        run: mvn test
+
+      - name: Package application
+        run: mvn package -DskipTests
